@@ -1,0 +1,138 @@
+#!/usr/bin/env node
+
+var fs   = require('fs'),
+    read = require('read');
+
+var pass = require(__dirname + '/../'),
+    tree = require(__dirname + '/../lib/tree'),
+    flat = require(__dirname + '/../lib/flat');
+
+function list (p, subfolderPath) {
+    var writer = p.list.bind(pass, subfolderPath),
+        listing;
+
+    try {
+        listing = tree(writer);
+    } catch (e) {
+        console.log(e);
+        return 1;
+    }
+
+    console.log('Password Store');
+    console.log(listing);
+    return 0;
+}
+
+function find (p, passNames) {
+    var writer = p.find.bind(p, passNames),
+        listing;
+
+    try {
+        listing = tree(writer);
+    } catch (e) {
+        console.log(e);
+        return 1;
+    }
+
+    console.log('Search Terms: ' + passNames);
+    console.log(listing);
+    return 0;
+}
+
+function grep (p, searchString) {
+    var writer = p.grep.bind(p, searchString),
+        listing;
+
+    try {
+        listing = flat(writer);
+    } catch (e) {
+        console.log(e);
+        return 1;
+    }
+
+    console.log('Search Terms: ' + searchString);
+    console.log(listing);
+    return 0;
+}
+
+function show (p, passName) {
+    var password;
+
+    try {
+        password = p.show(passName);
+    } catch (e) {
+        console.log(e);
+        return 1;
+    }
+
+    console.log(password);
+    return 0;
+}
+
+function showOrList (p, path) {
+    var password;
+
+    try {
+        password = p.show(path);
+    } catch (e) {
+        if (e.message === 'ERR_PATH_NOT_FOUND') {
+            console.log(e);
+            return 1;
+        }
+
+        return list(p, path);
+    }
+
+    console.log(password);
+    return 0;
+}
+
+function parseArgv (p) {
+    var argv   = process.argv.slice(2),
+        status = 1;
+
+    // TODO: clean this mess
+    if (argv.length === 0 || argv[0] === 'ls' || argv[0] === 'list') {
+        if (argv[1]) {
+            status = list(p, argv[1]);
+        } else {
+            status = list(p, '/');
+        }
+    } else if (argv[0] === 'find' || argv[0] === 'search') {
+        if (argv[1]) {
+            status = find(p, argv.slice(1));
+        } else {
+            console.log('pass-names is missing!');
+        }
+    } else if (argv[0] === 'grep') {
+        if (argv[1]) {
+            status = grep(p, argv[1]);
+        } else {
+            console.log('search-string is missing!');
+        }
+    } else if (argv[0] === 'show') {
+        if (argv[1]) {
+            status = show(p, argv[1]);
+        } else {
+            console.log('pass-name is missing!');
+        }
+    } else if (argv.length === 1) {
+        status = showOrList(p, argv[0]);
+    }
+
+    return status;
+}
+
+function unlock (err, passphrase, isDefault) {
+    var home  = process.env['HOME'],
+        key   = fs.readFileSync(home + '/.gnupg/secring.asc', 'UTF-8'),
+        store = fs.readFileSync(home + '/AppData/KeePassX/default.asc', 'UTF-8');
+
+    var p = pass(key, passphrase, store);
+    process.exit(parseArgv(p));
+}
+
+read({
+    prompt: 'passphrase: ',
+    silent: true
+}, unlock);
